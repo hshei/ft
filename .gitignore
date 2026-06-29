@@ -2,3 +2,4 @@
 *.jpg
 *.txt
 *.bin
+.DS_Store/
