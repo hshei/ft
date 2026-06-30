@@ -12,6 +12,7 @@
 #include "sender.h"
 #include "receiver.h"
 #include "discovery.h"
+#include "crypto.h"
 #include "helper.h"
 #include "datastructures.h"
 
@@ -80,11 +81,14 @@ int main(int argc, char **argv){
     
     int flag;
     // "c::" the (::) meaning optional number after the flag
-    while ((flag = getopt(argc, argv, "c::")) != -1){
+    while ((flag = getopt(argc, argv, "c::e")) != -1){
         switch (flag){
             case 'c':
                 opts.compress = true;
                 if (optarg) opts.comp_level = atoi(optarg);
+                break;
+            case 'e':
+                opts.encrypt = true;
                 break;
             default:
                 printf("%s", usage);
@@ -93,6 +97,12 @@ int main(int argc, char **argv){
     }
 
     if (optind >= argc) {printf("%s", usage); return EXIT_FAILURE;}
+
+    // reading password without showing it on the screen
+    if (opts.encrypt) {
+        char *password = getpass("Password: ");   
+        derive_key(password, opts.key);
+    }
 
     // optind tell you where the positional arguments begin
     char *command = argv[optind];
@@ -124,7 +134,7 @@ int main(int argc, char **argv){
         sender_run(ip, files, &opts);
         vector_free(files);
     } else if (strcmp(command, "receive") == 0) {
-        receiver_run();
+        receiver_run(&opts);
     } else {
         printf("%s", usage);
         return EXIT_FAILURE;

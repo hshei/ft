@@ -8,6 +8,7 @@ typedef struct {
     bool compress;
     int comp_level;
     bool encrypt;
+    unsigned char key[32];
 } ft_options;
 
 void *get_in_addr(struct sockaddr *sa);

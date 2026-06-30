@@ -8,8 +8,10 @@
 #include <sys/socket.h>
 #include <zlib.h>
 #include <arpa/inet.h>
+#include <openssl/rand.h>
 
 #include "helper.h"
+#include "crypto.h"
 #include "datastructures.h"
 
 #define PORT "5678"
@@ -70,9 +72,13 @@ void sender_run(const char *ip, vector_s *files, ft_options *opts){
     int sockfd; get_sockfd(ip, &sockfd);
     // sending the file count
     send_all(sockfd, (char *)&file_count, sizeof(int));
-    // sending the compress flag once for the session
+    // sending the compress flag for the session
     uint8_t compress_flag = opts->compress ? 1 : 0;
     send_all(sockfd, (char *)&compress_flag, 1);
+    // sending the encrpty flag for the session
+    uint8_t encrypt_flag = opts->encrypt ? 1 : 0;
+    send_all(sockfd, (char *)&encrypt_flag, 1);
+    
     printf("sending %d file(s)\n\n", file_count);
 
     char size_str[32];
@@ -104,24 +110,35 @@ void sender_run(const char *ip, vector_s *files, ft_options *opts){
         char compressed[CHUNK_SIZE * 2]; //compression can be a little bigger in the worst case
         size_t bytes_read = 0;
 
-        uint64_t total_sent = 0;
-        int chunk_num = 0;
         while ((bytes_read = fread(chunk, 1, sizeof(chunk), fp)) > 0){
+            unsigned char *payload = (unsigned char *)chunk;
+            int payload_len = bytes_read;
+
             if ((opts->compress)){
                 uLongf comp_len = sizeof(compressed);
                 compress2((Bytef *)compressed, &comp_len, (Bytef *)chunk, bytes_read, opts->comp_level);
 
-                // sending the compressed chunk size before the chunk
-                uint32_t clen = (uint32_t)comp_len;
-                send_all(sockfd, (char *)&clen, 4);
-                send_all(sockfd, compressed, comp_len);
-            } else {
-                 uint32_t clen = (uint32_t)bytes_read;
-                if (send_all(sockfd, (char *)&clen, 4) < 0) { printf("DEBUG: clen send failed at chunk %d\n", chunk_num); break; }
-                if (send_all(sockfd, chunk, bytes_read) < 0) { printf("DEBUG: data send failed at chunk %d\n", chunk_num); break; }
-                total_sent += bytes_read;
-                chunk_num++;
+                payload = (unsigned char *)compressed;
+                payload_len = comp_len;
             }
+
+            //  encrypt after compress (if both), or just encrypt 
+            if (opts->encrypt){
+                unsigned char iv[16];
+                // random 16-bytes value that maes encrption non-deterministic
+                RAND_bytes(iv, 16);   
+
+                unsigned char enc[CHUNK_SIZE * 2 + 16];
+                int enc_len = encrypt_chunk(opts->key, iv, payload, payload_len, enc);
+
+                send_all(sockfd, (char *)iv, 16);              // IV first
+                payload = enc;
+                payload_len = enc_len;
+            } 
+
+            uint32_t clen = (uint32_t)payload_len;
+            send_all(sockfd, (char *)&clen, 4);
+            send_all(sockfd, (char *)payload, payload_len);
         }
         
         format_size(filesize, size_str, sizeof(size_str));

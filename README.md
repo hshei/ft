@@ -42,6 +42,23 @@ The folder structure is preserved on the receiver side.
 
 Compression trades CPU for bandwidth. Useful on slow links; skip it on fast local networks where raw transfer is faster.
 
+**Encrypt during transfer:**
+
+```bash
+./ft -e send secret.pdf           # prompts for a password on both ends
+./ft -e receive                   # enter the same password
+```
+
+Both sides enter a shared password. Files are encrypted with AES-256-CBC before leaving the sender and decrypted on arrival. A wrong password fails the transfer instead of writing garbage.
+
+**Combine compression and encryption:**
+
+```bash
+./ft -c9 -e send bigfile.log
+```
+
+Data is compressed first, then encrypted.
+
 ## How It Works
 
 1. Receiver starts listening for TCP connections and UDP discovery broadcasts
@@ -50,9 +67,9 @@ Compression trades CPU for bandwidth. Useful on slow links; skip it on fast loca
 4. Sender streams file header (filename + size) followed by file data in 32KB chunks
 5. Receiver writes to disk with a live progress bar
 
-With `-c`, each chunk is compressed with zlib before sending and decompressed on arrival; compressed chunks are length-prefixed so the receiver knows how many bytes to read.
+With `-c`, each chunk is compressed with zlib before sending and decompressed on arrival; compressed chunks are length-prefixed so the receiver knows how many bytes to read. With `-e`, a key is derived from the shared password (PBKDF2), and each chunk is encrypted with AES-256-CBC using a fresh random IV. When both are used, data is compressed then encrypted on the way out, and decrypted then decompressed on the way in.
 
-``` txt
+```
 sending 2 file(s)
 
 sent notes.txt (1.2 KB)
@@ -61,7 +78,7 @@ sent backup.tar (45.3 MB)
 done — 2 file(s) sent
 ```
 
-``` txt
+```
 waiting for connection...
 discovered by 192.168.1.10
 connected from 192.168.1.10
@@ -81,13 +98,13 @@ receiving backup.tar (45.3 MB)
 make
 ```
 
-Produces a single binary `ft`. Requires zlib (`-lz`), which ships with macOS and most Linux distros.
+Produces a single binary `ft`. Requires zlib (`-lz`) and OpenSSL (`-lcrypto`), both standard on macOS and Linux. On Linux you may need `libssl-dev`.
 
 ## Protocol
 
 Binary header per file, followed by raw file data:
 
-``` txt
+```
 ┌────────────────┬──────────────────┬───────────────┬──────────────┐
 │ name_len (2)   │ filename (n)     │ filesize (8)  │ file data... │
 └────────────────┴──────────────────┴───────────────┴──────────────┘
@@ -97,7 +114,7 @@ Auto-discovery uses UDP broadcast on the local network. The receiver listens on 
 
 ## Project Structure
 
-``` bash
+```
 ft/
 ├── include/
 │   ├── sender.h       sender interface
@@ -109,6 +126,7 @@ ft/
 │   ├── sender.c       connect, stream files
 │   ├── receiver.c     listen, receive files, recreate directories, progress bar
 │   ├── discovery.c    UDP broadcast/listen with poll
+│   ├── crypto.c       AES-256 encryption, PBKDF2 key derivation
 │   └── helper.c       ft_error, format_size
 ├── lib/
 │   └── datastructures/  type-generic data structures library (vector for file lists)
@@ -119,4 +137,3 @@ ft/
 ## TODO
 
 - Transfer resume on interrupted connections
-- Encryption (AES with shared password)

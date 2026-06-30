@@ -1,6 +1,8 @@
 #ifndef RECOVERY_H
 #define RECOVERY_H
 
-void receiver_run(void);
+#include "helper.h"
+
+void receiver_run(ft_options *opts);
 
 #endif // RECOVERY_H

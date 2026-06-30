@@ -11,6 +11,7 @@
 #include <arpa/inet.h>
 
 #include "discovery.h"
+#include "crypto.h"
 #include "helper.h"
 
 #define PORT "5678"
@@ -80,7 +81,7 @@ static void make_dirs(const char *filepath) {
     }
 }
 
-void receiver_run(void){
+void receiver_run(ft_options *opts){
     int sockfd; get_sockfd(&sockfd);
     if (listen(sockfd, BACKLOG) == -1) ft_error("failed to listen on port");
 
@@ -94,6 +95,10 @@ void receiver_run(void){
     // recv the compress flag
     uint8_t compress_flag = 0;
     recv_all(new_fd, (char *)&compress_flag, 1);
+
+    // recv the encrypt flag
+    uint8_t encrypt_flag = 0;
+    recv_all(new_fd, (char *)&encrypt_flag, 1);
 
     for (int i = 0; i < file_count; i++){
         // recv name_len 
@@ -128,6 +133,8 @@ void receiver_run(void){
 
         char chunk[CHUNK_SIZE];
         char compressed[CHUNK_SIZE * 2]; //compression can be a little bigger than original in worst case
+        unsigned char enc[CHUNK_SIZE * 2 + 16]; // AES encrypts in 16-byte blocks, so needs some room when the data is not a mutiple of 16
+
         uint64_t total = 0;
         time_t start = time(NULL);
         int bar_width = 30;
@@ -135,32 +142,53 @@ void receiver_run(void){
 
         // receiving loop
         while (total < filesize) {
+            unsigned char iv[16];
+
             // read the chunck size
+            // stage 1: read IV (only if encrypting)
+            if (encrypt_flag) {
+                if (recv_all(new_fd, (char *)iv, 16) < 0) {
+                    fclose(fp); close(new_fd);
+                    ft_error("transfer interrupted");
+                }
+            }
+
+            // read the length-prefixed payload
             uint32_t clen;
-            int r = recv_all(new_fd, (char *)&clen, 4);
-        
-            if (r < 0){
+            if (recv_all(new_fd, (char *)&clen, 4) < 0) {
                 fclose(fp); close(new_fd);
-                ft_error("Transfer Interrupted\n");                
+                ft_error("transfer interrupted");
             }
 
-            // read exactly clen bytes
-            if (recv_all(new_fd, compressed, clen) < 0){
+            if (recv_all(new_fd, (char *)enc, clen) < 0) {
                 fclose(fp); close(new_fd);
-                ft_error("\nTransfer Interrupted");
+                ft_error("transfer interrupted");
             }
 
-            size_t write_len = 0;
-            if (compress_flag){
-                // decompress
+            unsigned char *payload = enc;
+            int payload_len = clen;
+
+            // stage 2: decrypt (reverse of sender's last stage)
+            if (encrypt_flag) {
+                int dec_len = decrypt_chunk(opts->key, iv, enc, clen, (unsigned char *)compressed);
+                if (dec_len < 0) {
+                    fclose(fp); close(new_fd);
+                    ft_error("decryption failed — wrong password?");
+                }
+                payload = (unsigned char *)compressed;
+                payload_len = dec_len;
+            }
+
+            // stage 3: decompress (reverse of sender's first stage)
+            size_t write_len;
+            if (compress_flag) {
                 uLongf dlen = sizeof(chunk);
-                uncompress((Bytef *)chunk, &dlen, (Bytef *)compressed, clen);
-
+                uncompress((Bytef *)chunk, &dlen, payload, payload_len);
                 fwrite(chunk, 1, dlen, fp);
-                write_len += dlen;
+                write_len = dlen;
             } else {
-                fwrite(compressed, 1, clen, fp);
-                write_len = clen;
+                fwrite(payload, 1, payload_len, fp);
+                write_len = payload_len;
             }
 
             total += write_len;
