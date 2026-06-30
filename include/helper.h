@@ -2,7 +2,7 @@
 #define HELPER_H
 
 #include <stdbool.h>
-#define CHUNK_SIZE 2048 // 32KB
+#define CHUNK_SIZE 32768 // 32KB
 
 typedef struct {
     bool compress;

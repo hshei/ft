@@ -17,6 +17,7 @@
 #define BACKLOG 10
 
 static int recv_all(int fd, char *buf, size_t len) {
+    // recv does not guarantee all the sent data on one-go, so this is the solution
     size_t total = 0;
     while (total < len) {
         ssize_t n = recv(fd, buf + total, len - total, 0);
@@ -27,6 +28,7 @@ static int recv_all(int fd, char *buf, size_t len) {
 }
 
 static void get_sockfd(int *sockfd_out){
+    // this code is almost baseline, you can see it on beejs network tutorial
     int sockfd;
     struct addrinfo hints, *servinfo, *p;
     int yes=1;
@@ -82,7 +84,7 @@ void receiver_run(void){
     int sockfd; get_sockfd(&sockfd);
     if (listen(sockfd, BACKLOG) == -1) ft_error("failed to listen on port");
 
-    // sending upd broadcast
+    // getting the tcp connection when ip is used, or connection from udp discovery if a local device connects
     int new_fd = discovery_listen(sockfd);
     
     // recv file count

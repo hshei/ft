@@ -15,6 +15,7 @@
 #define PORT "5678"
 
 static void get_sockfd(const char *ip, int *sockfd_out){
+    // this code is almost baseline, you can get it from beejs network tutorial
     int sockfd;  
     struct addrinfo hints, *servinfo, *p;
     int rv;
@@ -27,7 +28,6 @@ static void get_sockfd(const char *ip, int *sockfd_out){
         ft_error("failed to resolve address");
     }
 
-    // loop through all the results and connect to the first we can
     for(p = servinfo; p != NULL; p = p->ai_next) {
         if ((sockfd = socket(p->ai_family, p->ai_socktype,
                 p->ai_protocol)) == -1) continue;
@@ -54,6 +54,7 @@ static void get_sockfd(const char *ip, int *sockfd_out){
 }
 
 int send_all(int fd, const char *buf, size_t len) {    
+    // send() does not guarantee sending all the bytes in one-go, so this is the solution
     size_t total = 0;
     while (total < len) {
         ssize_t n = send(fd, buf + total, len - total, 0);
@@ -123,8 +124,6 @@ void sender_run(const char *ip, vector_s *files, ft_options *opts){
             }
         }
         
-        printf("DEBUG: sender finished, %d chunks, %llu bytes\n", chunk_num, total_sent);
-
         format_size(filesize, size_str, sizeof(size_str));
         printf("sent %s (%s)\n", file, size_str);     
         

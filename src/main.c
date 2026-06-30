@@ -23,11 +23,11 @@ void collect_files(const char *dir_path, vector_s *files){
 
     struct dirent *entry;
     while ((entry = readdir(dir)) != NULL){
-        // skipping . and ..
+        // skipping . and .. hidden directories
         if (strcmp(entry->d_name, ".") == 0 || strcmp(entry->d_name, "..") == 0)
             continue;
         
-        // building the full path
+        // building the full path for each file
         snprintf(full_path, sizeof(full_path), "%s/%s", dir_path, entry->d_name);
 
         struct stat st;
@@ -47,13 +47,16 @@ void build_file_list(char **args, int arg_count, vector_s *files){
     char err[256];
     for (int i = 0; i < arg_count; i++){
         if (stat(args[i], &st) == -1){
+            // file not found
             snprintf(err, sizeof(err), "not found %s", args[i]);
             ft_error(err);
         }
 
         if (S_ISDIR(st.st_mode)) {
+            // if the args is a directory, traverse it
             collect_files(args[i], files);
         } else {
+            // push to the vectors
             char *path = strdup(args[i]);
             vector_push(files, &path);
         }
@@ -71,6 +74,7 @@ int main(int argc, char **argv){
     opts.comp_level = Z_DEFAULT_COMPRESSION;
     
     int flag;
+    // "c::" the (::) meaning optional number after the flag
     while ((flag = getopt(argc, argv, "c::")) != -1){
         switch (flag){
             case 'c':

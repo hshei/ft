@@ -3,4 +3,4 @@
 *.txt
 *.bin
 .DS_Store/
-ft
+ft*
