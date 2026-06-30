@@ -6,6 +6,7 @@
 #include <sys/stat.h>
 #include <netinet/in.h>
 #include <sys/socket.h>
+#include <zlib.h>
 #include <arpa/inet.h>
 
 #include "helper.h"
@@ -19,7 +20,7 @@ static void get_sockfd(const char *ip, int *sockfd_out){
     int rv;
     char s[INET6_ADDRSTRLEN];
     memset(&hints, 0, sizeof hints);
-    hints.ai_family = AF_INET;
+    hints.ai_family = AF_INET; // ipv4
     hints.ai_socktype = SOCK_STREAM;
 
     if ((rv = getaddrinfo(ip, PORT, &hints, &servinfo)) != 0) {
@@ -52,28 +53,44 @@ static void get_sockfd(const char *ip, int *sockfd_out){
     *sockfd_out = sockfd;
 }
 
-void sender_run(const char *ip, vector_s *files){
+int send_all(int fd, const char *buf, size_t len) {    
+    size_t total = 0;
+    while (total < len) {
+        ssize_t n = send(fd, buf + total, len - total, 0);
+        if (n <= 0) return -1;
+        total += n;
+    }
+    return 0;
+}
+
+void sender_run(const char *ip, vector_s *files, ft_options *opts){
     int file_count = files->size;
     // getting the socket fd
     int sockfd; get_sockfd(ip, &sockfd);
     // sending the file count
-    send(sockfd, &file_count, sizeof(int), 0);
+    send_all(sockfd, (char *)&file_count, sizeof(int));
+    // sending the compress flag once for the session
+    uint8_t compress_flag = opts->compress ? 1 : 0;
+    send_all(sockfd, (char *)&compress_flag, 1);
     printf("sending %d file(s)\n\n", file_count);
 
     char size_str[32];
     char err[256];
     struct stat st;
+
     for (int i = 0; i < file_count; i++){
         char *file; vector_get(files, i, &file);
         // getting the file size
         stat(file, &st);
         uint64_t filesize = st.st_size;
+
         // getting the name length
         uint16_t name_len = strlen(file);
+
         // sending header: name_len + filename + filesize
-        send(sockfd, &name_len, 2, 0);
-        send(sockfd, file, name_len, 0);
-        send(sockfd, &filesize, 8, 0);
+        send_all(sockfd, (char *)&name_len, 2);
+        send_all(sockfd, file, name_len);
+        send_all(sockfd, (char *)&filesize, 8);
                 
         // sending file data in chuncks
         FILE *fp = fopen(file, "rb");
@@ -82,22 +99,38 @@ void sender_run(const char *ip, vector_s *files){
             ft_error(err);
         }
     
-        char chunk[4096] = {0};
+        char chunk[CHUNK_SIZE];
+        char compressed[CHUNK_SIZE * 2]; //compression can be a little bigger in the worst case
         size_t bytes_read = 0;
+
+        uint64_t total_sent = 0;
+        int chunk_num = 0;
         while ((bytes_read = fread(chunk, 1, sizeof(chunk), fp)) > 0){
-            if (send(sockfd, chunk, bytes_read, 0) == -1) {
-                fclose(fp);
-                close(sockfd);
-                ft_error("transfer failed");
-            }        
+            if ((opts->compress)){
+                uLongf comp_len = sizeof(compressed);
+                compress2((Bytef *)compressed, &comp_len, (Bytef *)chunk, bytes_read, opts->comp_level);
+
+                // sending the compressed chunk size before the chunk
+                uint32_t clen = (uint32_t)comp_len;
+                send_all(sockfd, (char *)&clen, 4);
+                send_all(sockfd, compressed, comp_len);
+            } else {
+                 uint32_t clen = (uint32_t)bytes_read;
+                if (send_all(sockfd, (char *)&clen, 4) < 0) { printf("DEBUG: clen send failed at chunk %d\n", chunk_num); break; }
+                if (send_all(sockfd, chunk, bytes_read) < 0) { printf("DEBUG: data send failed at chunk %d\n", chunk_num); break; }
+                total_sent += bytes_read;
+                chunk_num++;
+            }
         }
+        
+        printf("DEBUG: sender finished, %d chunks, %llu bytes\n", chunk_num, total_sent);
 
         format_size(filesize, size_str, sizeof(size_str));
         printf("sent %s (%s)\n", file, size_str);     
-
-        fclose(fp);
+        
+        fclose(fp);        
     }
-
+    
     printf("\ndone — %d file(s) sent\n", file_count);
     close(sockfd);
 }

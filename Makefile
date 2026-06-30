@@ -1,4 +1,4 @@
-CFLAGS = -Wall -Wextra -Iinclude -Ilib/datastructures/include
+CFLAGS = -Wall -Wextra -Iinclude -lz -Ilib/datastructures/include
 
 SRC = src/main.c src/sender.c src/receiver.c src/discovery.c src/helper.c
 LIB_SRC = lib/datastructures/src/vector.c \

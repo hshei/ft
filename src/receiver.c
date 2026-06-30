@@ -4,6 +4,7 @@
 #include <string.h>
 #include <sys/stat.h>
 #include <time.h>
+#include <zlib.h>
 #include <unistd.h>
 #include <sys/socket.h>
 #include <netdb.h>
@@ -14,6 +15,16 @@
 
 #define PORT "5678"
 #define BACKLOG 10
+
+static int recv_all(int fd, char *buf, size_t len) {
+    size_t total = 0;
+    while (total < len) {
+        ssize_t n = recv(fd, buf + total, len - total, 0);
+        if (n <= 0) return -1;
+        total += n;
+    }
+    return 0;
+}
 
 static void get_sockfd(int *sockfd_out){
     int sockfd;
@@ -74,17 +85,22 @@ void receiver_run(void){
     // sending upd broadcast
     int new_fd = discovery_listen(sockfd);
     
+    // recv file count
     int file_count;
-    recv(new_fd, &file_count, sizeof(int), 0);
+    recv_all(new_fd, (char *)&file_count, sizeof(int));
+
+    // recv the compress flag
+    uint8_t compress_flag = 0;
+    recv_all(new_fd, (char *)&compress_flag, 1);
 
     for (int i = 0; i < file_count; i++){
         // recv name_len 
         uint16_t name_len;
-        recv(new_fd, &name_len, 2, 0);
+        recv_all(new_fd, (char *)&name_len, 2);
 
         // recv filename
         char filename[1024];
-        recv(new_fd, filename, name_len, 0);
+        recv_all(new_fd, filename, name_len);
         filename[name_len] = '\0';
 
         // reject path traversal
@@ -94,7 +110,7 @@ void receiver_run(void){
 
         // recv filesize 
         uint64_t filesize;
-        recv(new_fd, &filesize, 8, 0);
+        recv_all(new_fd, (char *)&filesize, 8);
 
         // formatting the receiving message 
         char size_str[32];
@@ -108,25 +124,44 @@ void receiver_run(void){
         FILE *fp = fopen(filename, "wb");
         if (!fp) { close(new_fd); ft_error("can't create file");}
 
-        char chunk[4096];
+        char chunk[CHUNK_SIZE];
+        char compressed[CHUNK_SIZE * 2]; //compression can be a little bigger than original in worst case
         uint64_t total = 0;
         time_t start = time(NULL);
         int bar_width = 30;
         char speed_str[32];
+
         // receiving loop
         while (total < filesize) {
-            // if the file is less than the chunk size, read the file size only
-            size_t remaining = filesize - total;
-            size_t to_read = remaining < sizeof(chunk) ? remaining: sizeof(chunk);
-            ssize_t n = recv(new_fd, chunk, to_read, 0);
-            if (n <= 0) {
-                printf("\ntransfer interrupted\n");
-                fclose(fp);
-                close(new_fd);
-                return;
+            // read the chunck size
+            uint32_t clen;
+            int r = recv_all(new_fd, (char *)&clen, 4);
+        
+            if (r < 0){
+                fclose(fp); close(new_fd);
+                ft_error("Transfer Interrupted\n");                
             }
-            fwrite(chunk, 1, n, fp);
-            total += n;
+
+            // read exactly clen bytes
+            if (recv_all(new_fd, compressed, clen) < 0){
+                fclose(fp); close(new_fd);
+                ft_error("\nTransfer Interrupted");
+            }
+
+            size_t write_len = 0;
+            if (compress_flag){
+                // decompress
+                uLongf dlen = sizeof(chunk);
+                uncompress((Bytef *)chunk, &dlen, (Bytef *)compressed, clen);
+
+                fwrite(chunk, 1, dlen, fp);
+                write_len += dlen;
+            } else {
+                fwrite(compressed, 1, clen, fp);
+                write_len = clen;
+            }
+
+            total += write_len;
 
             // progress bar with the pretty formatting
             int percent = (int)((total * 100) / filesize);
@@ -147,11 +182,7 @@ void receiver_run(void){
             fflush(stdout);
         }   
         printf("\n");
-
-        format_size(filesize, size_str, sizeof(size_str));
-        printf("\nsaved %s (%s)\n", filename, size_str);
         fclose(fp);
     }
-
     close(new_fd);
 }

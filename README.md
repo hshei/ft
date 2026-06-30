@@ -40,7 +40,7 @@ The folder structure is preserved on the receiver side.
 4. Sender streams file header (filename + size) followed by file data in 4KB chunks
 5. Receiver writes to disk with a live progress bar
 
-```
+``` txt
 sending 2 file(s)
 
 sent notes.txt (1.2 KB)
@@ -49,7 +49,7 @@ sent backup.tar (45.3 MB)
 done — 2 file(s) sent
 ```
 
-```
+``` txt
 waiting for connection...
 discovered by 192.168.1.10
 connected from 192.168.1.10
@@ -75,7 +75,7 @@ Produces a single binary `ft`. No external dependencies — just POSIX sockets a
 
 Binary header per file, followed by raw file data:
 
-```
+``` txt
 ┌────────────────┬──────────────────┬───────────────┬──────────────┐
 │ name_len (2)   │ filename (n)     │ filesize (8)  │ file data... │
 └────────────────┴──────────────────┴───────────────┴──────────────┘
@@ -85,7 +85,7 @@ Auto-discovery uses UDP broadcast on the local network. The receiver listens on 
 
 ## Project Structure
 
-```
+``` bash
 ft/
 ├── include/
 │   ├── sender.h       sender interface
