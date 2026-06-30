@@ -32,13 +32,25 @@ A local network file transfer tool written in C. Send files between machines wit
 
 The folder structure is preserved on the receiver side.
 
+**Compress during transfer:**
+
+```bash
+./ft -c send bigfile.log          # default compression level
+./ft -c9 send bigfile.log         # max compression (slowest)
+./ft -c1 send bigfile.log         # fastest compression
+```
+
+Compression trades CPU for bandwidth. Useful on slow links; skip it on fast local networks where raw transfer is faster.
+
 ## How It Works
 
 1. Receiver starts listening for TCP connections and UDP discovery broadcasts
 2. Sender broadcasts a UDP discovery packet on the local network — or connects directly if an IP is provided
 3. Receiver responds, sender connects via TCP
-4. Sender streams file header (filename + size) followed by file data in 4KB chunks
+4. Sender streams file header (filename + size) followed by file data in 32KB chunks
 5. Receiver writes to disk with a live progress bar
+
+With `-c`, each chunk is compressed with zlib before sending and decompressed on arrival; compressed chunks are length-prefixed so the receiver knows how many bytes to read.
 
 ``` txt
 sending 2 file(s)
@@ -69,7 +81,7 @@ receiving backup.tar (45.3 MB)
 make
 ```
 
-Produces a single binary `ft`. No external dependencies — just POSIX sockets and standard C.
+Produces a single binary `ft`. Requires zlib (`-lz`), which ships with macOS and most Linux distros.
 
 ## Protocol
 
@@ -107,5 +119,4 @@ ft/
 ## TODO
 
 - Transfer resume on interrupted connections
-- Encryption (TLS)
-- Compression
+- Encryption (AES with shared password)

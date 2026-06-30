@@ -65,9 +65,14 @@ void build_file_list(char **args, int arg_count, vector_s *files){
 }
 
 int main(int argc, char **argv){
-    const char *usage = "Usage: ft send <ip> <file>\n"
-                    "       ft send <file>\n"
-                    "       ft receive\n";
+    const char *usage =
+    "Usage:\n"
+    "  ft [options] send [ip] <file|dir>...   send files or directories\n"
+    "  ft receive                             receive files\n"
+    "\n"
+    "Options:\n"
+    "  -c[level]   compress during transfer (level 1-9, default 6)\n";
+
 
     ft_options opts = {0};
     opts.compress = false;
