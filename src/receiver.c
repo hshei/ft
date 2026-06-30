@@ -2,6 +2,7 @@
 #include <stdlib.h>
 #include <stdint.h>
 #include <string.h>
+#include <sys/stat.h>
 #include <time.h>
 #include <unistd.h>
 #include <sys/socket.h>
@@ -57,15 +58,19 @@ static void get_sockfd(int *sockfd_out){
     *sockfd_out = sockfd;
 }
 
-static void format_size(uint64_t bytes, char *out, size_t out_size) {
-    if (bytes >= 1024 * 1024 * 1024)
-        snprintf(out, out_size, "%.1f GB", (double)bytes / (1024 * 1024 * 1024));
-    else if (bytes >= 1024 * 1024)
-        snprintf(out, out_size, "%.1f MB", (double)bytes / (1024 * 1024));
-    else if (bytes >= 1024)
-        snprintf(out, out_size, "%.1f KB", (double)bytes / 1024);
-    else
-        snprintf(out, out_size, "%llu B", bytes);
+static void make_dirs(const char *filepath) {
+    char path[1024];
+    strncpy(path, filepath, sizeof(path) - 1);
+    path[sizeof(path) - 1] = '\0';
+
+    // walk through each '/' and create the directory up to that point
+    for (char *p = path + 1; *p; p++) {
+        if (*p == '/') {
+            *p = '\0';                    // temporarily terminate
+            mkdir(path, 0755);            // create this dir level
+            *p = '/';                     // restore
+        }
+    }
 }
 
 void receiver_run(void){
@@ -88,24 +93,25 @@ void receiver_run(void){
         recv(new_fd, filename, name_len, 0);
         filename[name_len] = '\0';
 
+        // reject path traversal
+        if (strstr(filename, "..") != NULL) {
+            ft_error("rejected unsafe path");
+        }
+
         // recv filesize 
         uint64_t filesize;
         recv(new_fd, &filesize, 8, 0);
 
-        // sanitize filename
-        const char *safe_name = strrchr(filename, '/');
-        safe_name = safe_name ? safe_name + 1: filename;
-            // warn user if file already exists
-            if (access(safe_name, F_OK) == 0) {
-                printf("\nwarning: %s already exists, overwriting\n\n", safe_name);
-            }        
         // formatting the receiving message 
         char size_str[32];
         format_size(filesize, size_str, sizeof(size_str));
-        printf("receiving %s (%s)\n", safe_name, size_str);
+        printf("receiving %s (%s)\n", filename, size_str);
         
+        // create parent directories
+        make_dirs(filename);
+
         // opening the file for receive
-        FILE *fp = fopen(safe_name, "wb");
+        FILE *fp = fopen(filename, "wb");
         if (!fp) { close(new_fd); ft_error("can't create file");}
 
         char chunk[4096];
@@ -148,7 +154,7 @@ void receiver_run(void){
         }   
         printf("\n");
 
-        printf("\nsaved %s (%llu bytes)\n", safe_name, filesize);
+        printf("\nsaved %s (%llu bytes)\n", filename, filesize);
         fclose(fp);
     }
 

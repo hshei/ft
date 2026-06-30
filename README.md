@@ -99,4 +99,4 @@ ft/
 - Directory transfer (recursive send)
 - Transfer resume on interrupted connections
 - Encryption (TLS)
-- Compression 
+- Compression

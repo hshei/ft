@@ -1,6 +1,8 @@
 #ifndef SENDER_H
 #define SENDER_H
 
-void sender_run(const char *ip, char **files, int file_count);
+#include "datastructures.h"
+
+void sender_run(const char *ip, vector_s *files);
 
 #endif // SENDER_H
