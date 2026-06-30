@@ -69,7 +69,7 @@ Data is compressed first, then encrypted.
 
 With `-c`, each chunk is compressed with zlib before sending and decompressed on arrival; compressed chunks are length-prefixed so the receiver knows how many bytes to read. With `-e`, a key is derived from the shared password (PBKDF2), and each chunk is encrypted with AES-256-CBC using a fresh random IV. When both are used, data is compressed then encrypted on the way out, and decrypted then decompressed on the way in.
 
-```
+```txt
 sending 2 file(s)
 
 sent notes.txt (1.2 KB)
@@ -78,7 +78,7 @@ sent backup.tar (45.3 MB)
 done — 2 file(s) sent
 ```
 
-```
+```txt
 waiting for connection...
 discovered by 192.168.1.10
 connected from 192.168.1.10
@@ -102,19 +102,36 @@ Produces a single binary `ft`. Requires zlib (`-lz`) and OpenSSL (`-lcrypto`), b
 
 ## Protocol
 
-Binary header per file, followed by raw file data:
+After connecting, the sender transmits a session header, then each file:
 
+```txt
+Session:
+┌──────────────┬─────────────────┬─────────────────┐
+│ file_count(4)│ compress_flag(1)│ encrypt_flag (1)│
+└──────────────┴─────────────────┴─────────────────┘
+
+Per file:
+┌──────────────┬──────────────┬───────────────┬───────────────┐
+│ name_len (2) │ filename (n) │ filesize (8)  │ chunks...     │
+└──────────────┴──────────────┴───────────────┴───────────────┘
 ```
-┌────────────────┬──────────────────┬───────────────┬──────────────┐
-│ name_len (2)   │ filename (n)     │ filesize (8)  │ file data... │
-└────────────────┴──────────────────┴───────────────┴──────────────┘
+
+`filesize` is always the original (uncompressed, unencrypted) size, so the receiver knows when the file is complete.
+
+Chunk framing depends on the flags:
+
+``` txt
+Raw:         [ data ]                              (filesize-bounded stream)
+Compressed:  [ clen (4) ][ compressed data ]
+Encrypted:   [ IV (16) ][ clen (4) ][ ciphertext ]
+Both:        [ IV (16) ][ clen (4) ][ encrypted(compressed data) ]
 ```
 
 Auto-discovery uses UDP broadcast on the local network. The receiver listens on both a TCP port (for file transfer) and a UDP port (for discovery) simultaneously using `poll`.
 
 ## Project Structure
 
-```
+``` bash
 ft/
 ├── include/
 │   ├── sender.h       sender interface
