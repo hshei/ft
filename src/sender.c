@@ -36,7 +36,6 @@ static void get_sockfd(const char *ip, int *sockfd_out){
             s, sizeof s);
 
         if (connect(sockfd, p->ai_addr, p->ai_addrlen) == -1) {
-            perror("client: connect");
             close(sockfd);
             continue;
         }
@@ -87,10 +86,9 @@ void sender_run(const char *ip, vector_s *files){
         size_t bytes_read = 0;
         while ((bytes_read = fread(chunk, 1, sizeof(chunk), fp)) > 0){
             if (send(sockfd, chunk, bytes_read, 0) == -1) {
-                perror("send failed");
                 fclose(fp);
                 close(sockfd);
-                return;
+                ft_error("transfer failed");
             }        
         }
 

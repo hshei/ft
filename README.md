@@ -24,6 +24,14 @@ A local network file transfer tool written in C. Send files between machines wit
 ./ft send 192.168.1.5 file1.txt file2.pdf
 ```
 
+**Send a directory (recursive):**
+
+```bash
+./ft send myfolder
+```
+
+The folder structure is preserved on the receiver side.
+
 ## How It Works
 
 1. Receiver starts listening for TCP connections and UDP discovery broadcasts
@@ -32,7 +40,7 @@ A local network file transfer tool written in C. Send files between machines wit
 4. Sender streams file header (filename + size) followed by file data in 4KB chunks
 5. Receiver writes to disk with a live progress bar
 
-``` txt
+```
 sending 2 file(s)
 
 sent notes.txt (1.2 KB)
@@ -41,7 +49,7 @@ sent backup.tar (45.3 MB)
 done — 2 file(s) sent
 ```
 
-``` txt
+```
 waiting for connection...
 discovered by 192.168.1.10
 connected from 192.168.1.10
@@ -67,7 +75,7 @@ Produces a single binary `ft`. No external dependencies — just POSIX sockets a
 
 Binary header per file, followed by raw file data:
 
-``` txt
+```
 ┌────────────────┬──────────────────┬───────────────┬──────────────┐
 │ name_len (2)   │ filename (n)     │ filesize (8)  │ file data... │
 └────────────────┴──────────────────┴───────────────┴──────────────┘
@@ -77,7 +85,7 @@ Auto-discovery uses UDP broadcast on the local network. The receiver listens on 
 
 ## Project Structure
 
-``` bash
+```
 ft/
 ├── include/
 │   ├── sender.h       sender interface
@@ -85,18 +93,19 @@ ft/
 │   ├── discovery.h    UDP auto-discovery
 │   └── helper.h       error handling, formatting
 ├── src/
-│   ├── main.c         argument parsing, mode dispatch
+│   ├── main.c         argument parsing, directory walking, mode dispatch
 │   ├── sender.c       connect, stream files
-│   ├── receiver.c     listen, receive files, progress bar
+│   ├── receiver.c     listen, receive files, recreate directories, progress bar
 │   ├── discovery.c    UDP broadcast/listen with poll
 │   └── helper.c       ft_error, format_size
+├── lib/
+│   └── datastructures/  type-generic data structures library (vector for file lists)
 ├── Makefile
 └── .gitignore
 ```
 
 ## TODO
 
-- Directory transfer (recursive send)
 - Transfer resume on interrupted connections
 - Encryption (TLS)
 - Compression

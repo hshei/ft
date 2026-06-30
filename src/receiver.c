@@ -33,10 +33,7 @@ static void get_sockfd(int *sockfd_out){
     // loop through all the results and bind to the first we can
     for(p = servinfo; p != NULL; p = p->ai_next) {
         if ((sockfd = socket(p->ai_family, p->ai_socktype,
-                p->ai_protocol)) == -1) {
-            perror("server: socket");
-            continue;
-        }
+                p->ai_protocol)) == -1)  continue;
 
         if (setsockopt(sockfd, SOL_SOCKET, SO_REUSEADDR, &yes,
                 sizeof(int)) == -1) ft_error("failed to configure socket");
@@ -50,10 +47,7 @@ static void get_sockfd(int *sockfd_out){
 
     freeaddrinfo(servinfo); // all done with this structure
     
-    if (p == NULL)  {
-        fprintf(stderr, "server: failed to bind\n");
-        exit(1);
-    }
+    if (p == NULL) ft_error("failed to bind to port");
 
     *sockfd_out = sockfd;
 }
@@ -89,7 +83,7 @@ void receiver_run(void){
         recv(new_fd, &name_len, 2, 0);
 
         // recv filename
-        char filename[256];
+        char filename[1024];
         recv(new_fd, filename, name_len, 0);
         filename[name_len] = '\0';
 
@@ -154,7 +148,8 @@ void receiver_run(void){
         }   
         printf("\n");
 
-        printf("\nsaved %s (%llu bytes)\n", filename, filesize);
+        format_size(filesize, size_str, sizeof(size_str));
+        printf("\nsaved %s (%s)\n", filename, size_str);
         fclose(fp);
     }
 
