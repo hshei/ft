@@ -25,7 +25,7 @@ A local network file transfer tool written in C. Send files between machines wit
 ```
 
 **Send a directory (recursive):**
-
+ find
 ```bash
 ./ft send myfolder
 ```
