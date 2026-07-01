@@ -1,4 +1,5 @@
 # ft
+![build](https://github.com/hshei/ft/actions/workflows/build.yml/badge.svg)
 
 A local network file transfer tool written in C. Send files between machines with one command — no setup, no accounts, no cloud.
 
